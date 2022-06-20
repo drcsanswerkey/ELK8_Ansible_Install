@@ -1,0 +1,62 @@
+#!/bin/ansible-playbook
+# Written by Dr. C's Answer Key drcsanswerkey@gmail.com
+# This playbook installs Kibana 8.1.x on either a RedHat or Debian based system
+# pass a -k and -K and maybe a -i 
+
+### Notes ###
+## See roles/install_elk_stack_8/README.md for instructions on
+# - Forming the cluster
+# - Installing and configuring Kibana & Fleet
+# - And much much more!!!
+
+---
+-  name: Install Kibana 8.x
+   become: yes
+   vars:
+      install_kibana: "y"
+      install_elasticsearch: "n"
+      ## Uncomment/hard code the following vars if you want to speed things up & comment out the vars prompts below
+      # environs: "<must match filename in group_vars minus '.yml'>"
+      # servers: 
+      #    - <kibana_server>
+
+   vars_prompt:
+      -  name: gpg_signature
+         prompt: "\n\n
+         ### Please Note ###\n
+         If you\'re on a Debian system and installing the Elasticsearch products using their apt repository and\n
+         have not added their gpg key, before you continue, you'll need to run the following gpg key import command\n
+         on each of the elk servers where you intend to install Elastic\'s products:\n\n
+
+         wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo gpg --dearmor -o /usr/share/keyrings/elasticsearch-keyring.gpg\n\n
+
+         (please let me know if you can sort this out in an Ansible-ized way - I fail, I could not! :-/  :-p)\n\n
+         Press <enter> to continue or ctrl+c to exit out"
+         private: no
+
+      -  name: environs
+         prompt: "Which environment are you operating in? (answer must match filename in group_vars minus '.yml')"
+         private: no
+
+      -  name: servers
+         prompt: "Which server(s) would you like to provision?  (if more than one server - answer with [group_name] from inventory)"
+         private: no
+
+      -  name: install_method
+         prompt: "Will you be installing from Files (located in the role's /files directory) or via Online repo? (f/o)"
+         private: no
+
+      -  name: version_installing
+         prompt: "What version do you wish to install (ensure you have those binaries if installing from files)"
+         private: no
+
+   hosts: "{{ servers }}"
+
+   vars_files: 
+   -  "../group_vars/{{ environs }}.yml"   
+         
+   roles:
+      -  ../roles/install_elk_stack_8
+
+   pre_tasks:  
+      -  set_fact: timestamp="{{lookup('pipe','date +%Y%m%d%H%M%S')}}"

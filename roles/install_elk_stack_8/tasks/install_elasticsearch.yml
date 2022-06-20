@@ -1,0 +1,286 @@
+---
+##Tweaking system settings to comply with ES production mode requirements 
+-  name: Disabling swap
+   shell: swapoff -a
+
+-  name: Permanently disabling swap in fstab
+   replace:
+      path: /etc/fstab
+      regexp: '^([^#].*?\sswap\s+.*)$'
+      replace: '# \1'
+
+-  name: Disabling swappiness in sysctl
+   sysctl:
+      name: vm.swappiness
+      value: '1'
+      state: present
+
+-  name: Setting up /esdata mountpoint
+   mount:
+      path: /esdata # Change/configure as necessary
+      src: '{{ es_data_src }}{{ es_data_paths }}'  # Configure this in your group vars file(s) to reflect either local or nas mount point for ES Data
+      fstype: nfs  # Change or comment out as necessary
+      state: mounted
+      backup: yes
+
+-  name: Creating per node elk_data_path sub-directories # May or may not be necessary in your environment
+   file:
+      path: "{{ es_data_paths }}/{{ ansible_hostname }}"
+      owner: root
+      group: root
+      state: directory
+      mode: 0777
+
+-  name: Disabling SELinux
+   selinux:
+      state: disabled
+   ignore_errors: true
+   when: ansible_os_family == "RedHat"
+
+-  name: Setting open file handles for user Elasticsearch
+   pam_limits:
+      domain: 'elasticsearch'
+      limit_type: '-'
+      limit_item: 'nofile'
+      value: '65535'
+      # if necessary, double check in Kibana's devtools: GET _nodes/stats/process?filter_path=**.max_file_descriptors
+ 
+-  name: Setting open file handles for user Elasticsearch
+   pam_limits:
+      domain: 'elasticsearch'
+      limit_type: 'hard'
+      limit_item: 'memlock'
+      value: 'unlimited'
+
+-  name: Setting open file handles for user Elasticsearch
+   pam_limits:
+      domain: 'elasticsearch'
+      limit_type: 'soft'
+      limit_item: 'memlock'
+      value: 'unlimited'
+
+-  name: Setting open file handles for user Elasticsearch
+   pam_limits:
+      domain: 'elasticsearch'
+      limit_type: '-'
+      limit_item: 'memlock'
+      value: 'unlimited'
+
+-  name: Setting open file handles for user root
+   pam_limits:
+      domain: 'root'
+      limit_type: '-'
+      limit_item: 'memlock'
+      value: 'unlimited'
+
+###Begin tasks if installing from yum repo###
+-  name: Importing ElasticSearch gpg key
+   rpm_key:
+     state: present
+     key: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+     fingerprint: 4609 5ACC 8548 582C 1A26 99A9 D27D 666C D88E 42B4
+   when: ansible_os_family == "RedHat" and install_method == "o"
+
+-  name: Adding Elasticsearch 8 yum repo
+   yum_repository:
+     name: elasticsearch
+     description: Elasticsearch repo for 8.x packages
+     baseurl: https://artifacts.elastic.co/packages/8.x/yum
+     gpgcheck: yes
+     gpgkey: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+     enabled: yes
+   when: ansible_os_family == "RedHat" and install_method == "o"
+
+-  name: Installing ElasticSearch (yum online)
+   yum:
+      name: "elasticsearch-{{ version_installing }}"
+      state: present
+   register: es_yum_output
+   when: ansible_os_family == "RedHat" and install_method == "o"
+###End tasks if installing from yum repo###
+
+###Begin tasks if installing from rpm###
+-  name: Pushing out Elasticsearch rpm
+   copy:
+      src: ../files/installation_binaries/elasticsearch-{{ version_installing }}-x86_64.rpm
+      dest: /tmp/elasticsearch-{{ version_installing }}-x86_64.rpm
+      owner: root
+      group: root
+      mode: 0700
+   when: ansible_os_family == "RedHat" and install_method == "f"
+
+-  name: Installing ElasticSearch (rpm file)
+   yum:
+      name: /tmp/elasticsearch-{{ version_installing }}-x86_64.rpm
+      state: present
+   register: es_rpm_output
+   when: ansible_os_family == "RedHat" and install_method == "f"
+###End tasks if installing from rpm###
+
+###Begin tasks if installing from apt repo###
+# In accordance with Elastico's preferred method, ensure that apt-transport-https has been installed
+# Alter tasks below if you want to do it another way
+-  name: Ensuring pre-requisite apt-transport-https has been installed
+   apt:
+      name: apt-transport-https
+      state: present
+   when: ansible_os_family == "Debian" and install_method == "o"
+
+-  name: "Pushing out Elasticsearch repository file"
+   copy:
+      src: elastic-8.x.list
+      dest: /etc/apt/sources.list.d/
+      owner: root
+      group: root
+      mode: '0644'
+   when: ansible_os_family == "Debian" and install_method == "o"
+
+-  name: Installing ElasticSearch (apt online)
+   apt:
+      name: "elasticsearch={{ version_installing }}"
+      state: present
+      update_cache: yes
+   register: es_apt_output
+   when: ansible_os_family == "Debian" and install_method == "o"
+###End tasks if installing from apt repo###
+
+###Begin tasks if installing from deb###
+-  name: Pushing out Elasticsearch deb
+   copy:
+      src: ../files/installation_binaries/elasticsearch-{{ version_installing }}-amd64.deb
+      dest: /tmp/elasticsearch-{{ version_installing }}-amd64.deb
+      owner: root
+      group: root
+      mode: 0700
+   when: ansible_os_family == "Debian" and install_method == "f"
+
+-  name: Installing ElasticSearch (file deb)
+   apt:
+      deb: /tmp/elasticsearch-{{ version_installing }}-amd64.deb
+   register: es_deb_output
+   when: ansible_os_family == "Debian" and install_method == "f"
+###End tasks if installing from deb###
+
+# ## Printing ES passwords ##
+# -  name: "Printing Elasticsearch yum installation output - it has some important info"
+#    debug:
+#       msg: "\nThe generated password {{ es_yum_output.results[0].split('generated password')[1].split('If this')[0].strip('\\n\\n') }}\n\n {{ es_yum_output.results }}\n"
+#    when: ansible_os_family == "RedHat" and install_method == "o"
+
+# -  name: "Printing Elasticsearch rpm installation output - it has some important info"
+#    debug:
+#       msg: "\nThe generated password {{ es_rpm_output.results[0].split('generated password')[1].split('If this')[0].strip('\\n\\n') }}\n\n {{ es_rpm_output.results }}\n"
+#    when: ansible_os_family == "RedHat" and install_method == "f"
+
+# -  name: "Printing Elasticsearch apt installation output - it has some important info"
+#    debug:
+#       msg: "\n{{ es_apt_output.stdout_lines[-23] }}\n\n {{ es_apt_output.stdout_lines }}\n"
+#    when: ansible_os_family == "Debian" and install_method == "o"
+
+# -  name: "Printing Elasticsearch deb installation output - it has some important info"
+#    debug:
+#       msg: "\n{{ es_deb_output.stdout_lines[12] }}\n\n {{ es_deb_output.stdout_lines }}\n"
+#    when: ansible_os_family == "Debian" and install_method == "f"
+
+## Writing results to local file
+-  name: Writing yum installation output to file
+   copy: 
+      content: "\nThe generated password for the elastic built-in superuser is {{ es_yum_output.results[0].split('generated password')[1].split('If this')[0].strip('\\n\\n') }}\n\n {{ es_yum_output.results }}\n"
+      dest: "/tmp/es-{{ inventory_hostname }}-{{ timestamp }}"
+   when: ansible_os_family == "RedHat" and install_method == "o"
+
+-  name: Writing rpm installation output to file
+   copy: 
+      content: "\nThe generated password for the elastic built-in superuser is {{ es_rpm_output.results[0].split('generated password')[1].split('If this')[0].strip('\\n\\n') }}\n\n {{ es_rpm_output.results }}\n"
+      dest: "/tmp/es-{{ inventory_hostname }}-{{ timestamp }}"
+   when: ansible_os_family == "RedHat" and install_method == "f"
+
+-  name: Writing apt installation output to file
+   copy: 
+      content: "\n{{ es_apt_output.stdout_lines[-23] }}\n\n {{ es_apt_output.stdout_lines }}\n"
+      dest: "/tmp/es-{{ inventory_hostname }}-{{ timestamp }}"
+   when: ansible_os_family == "Debian" and install_method == "o"
+
+-  name: Writing deb installation output to file
+   copy: 
+      content: "\n{{ es_deb_output.stdout_lines[12] }}\n\n {{ es_deb_output.stdout_lines }}\n"
+      dest: "/tmp/es-{{ inventory_hostname }}-{{ timestamp }}"
+   when: ansible_os_family == "Debian" and install_method == "f"
+
+## Retrieving ES password to the Ansible server
+-  name: Retrieving installation output
+   fetch: 
+      src: "/tmp/es-{{ inventory_hostname }}-{{ timestamp }}"
+      dest: ../roles/install_elk_stack_8/files/output/
+      flat: yes
+
+###Uncomment these lines if you want to set the log directory to something other than /var/log/<clustername>
+## You'll also need to set this (and uncomment) in elasticsearch.yml.j2 {{ es_log_paths }}
+# -  name: Creating elk_log_path directory(ies) if defaults are no good
+#    file:
+#       path: "{{ item }}"
+#       owner: elasticsearch
+#       group: elasticsearch
+#       state: directory
+#       mode: 0755
+#    loop: "{{ es_log_paths }}"
+
+-  name: Templating out ElasticSearch config file
+   template:
+      src: ../templates/elasticsearch.yml.j2
+      dest: /etc/elasticsearch/elasticsearch.yml
+      owner: root
+      group: elasticsearch
+      backup: yes
+      mode: 0660
+
+# Several of the many things necessary to address memlocking problem
+-  name: Creating directory for override.conf
+   file:
+      path: /etc/systemd/system/elasticsearch.service.d
+      state: directory
+      owner: root
+      group: elasticsearch
+      mode: '0755'
+
+-  name: Pushing out override.conf to address memlocking issue
+   copy:
+      src: ../files/override.conf
+      dest: /etc/systemd/system/elasticsearch.service.d/override.conf
+      owner: root
+      group: elasticsearch
+      mode: '0665'
+     
+###Begin RedHat firewall tasks###
+# This turns on the firewall if it's off, add other ports as necessary for your environment (or turn it off as unadvisable as that may be)
+-  name: Opening ports for ssh, ElasticSearch and Fleet (22, 8220, 9200-9201, 9300-9305)
+   firewalld:
+     port: "{{ item }}"
+     permanent: yes
+     immediate: yes
+     state: enabled
+   loop: # Add other ports as necessary
+      - 22/tcp
+      # - 8220/tcp # uncomment if your Elasticsearch server is also acting as a Fleet server
+      - 9200-9201/tcp
+      - 9300-9305/tcp
+   ignore_errors: true
+   when: ansible_os_family == "RedHat"
+###End RedHat firewall tasks###
+
+###Begin Debian firewall tasks###
+# This turns on the firewall if it's off, add other ports as necessary for your environment (or turn it off as unadvisable as that may be)
+-  name: Opening ports for ssh, ElasticSearch and Fleet (22, 8220, 9200-9201, 9300-9305)
+   ufw:
+     rule: allow
+     port: "{{ item }}"
+     proto: tcp
+     state: enabled
+   loop: # Add other ports as necessary
+      - 22
+      # - 8220/tcp # uncomment if your Elasticsearch server is also acting as a Fleet server
+      - 9200:9201
+      - 9300:9305
+   ignore_errors: true
+   when: ansible_os_family == "Debian"
+###End Debian firewall tasks###

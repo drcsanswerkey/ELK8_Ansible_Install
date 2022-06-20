@@ -1,0 +1,127 @@
+# ======================== Elasticsearch Configuration =========================
+#
+# NOTE: Elasticsearch comes with reasonable defaults for most settings.
+#       Before you set out to tweak and tune the configuration, make sure you
+#       understand what are you trying to accomplish and the consequences.
+#
+# The primary way of configuring a node is via this file. This template lists
+# the most important settings you may want to configure for a production cluster.
+#
+# Please consult the documentation for further information on configuration options:
+# https://www.elastic.co/guide/en/elasticsearch/reference/index.html
+#
+# ---------------------------------- Cluster -----------------------------------
+#
+# Use a descriptive name for your cluster:
+#
+cluster.name: {{ es_cluster_name }}
+#
+# ------------------------------------ Node ------------------------------------
+#
+# Use a descriptive name for the node:
+#
+node.name:  {{ ansible_hostname }}
+# Add custom attributes to the node:
+#
+#node.attr.rack: r1
+#
+# ----------------------------------- Paths ------------------------------------
+#
+# Path to directory where to store the data (separate multiple locations by comma):
+#
+path.data: {{ es_data_paths }}/{{ ansible_hostname }}
+#
+# Path to log files:
+#
+path.logs: {{ es_log_paths }}
+#
+# ----------------------------------- Memory -----------------------------------
+#
+# Lock the memory on startup:
+#
+bootstrap.memory_lock: true
+# to check if this worked run the following in dev tools after the node starts up:
+# GET _nodes?filter_path=**.mlockall
+#
+# Make sure that the heap size is set to about half the memory available
+# on the system and that the owner of the process is allowed to use this
+# limit.
+#
+# Elasticsearch performs poorly when the system is swapping the memory.
+#
+# ---------------------------------- Network -----------------------------------
+#
+# By default Elasticsearch is only accessible on localhost. Set a different
+# address here to expose this node on the network:
+#
+network.host:  {{ ansible_default_ipv4.address }}
+#
+# By default Elasticsearch listens for HTTP traffic on the first free port it
+# finds starting at 9200. Set a specific HTTP port here:
+#
+#http.port: 9200
+#
+# For more information, consult the network module documentation.
+#
+# --------------------------------- Discovery ----------------------------------
+#
+# Pass an initial list of hosts to perform discovery when this node is started:
+# The default list of hosts is ["127.0.0.1", "[::1]"]
+#
+#discovery.seed_hosts:{% for dsh in es_hosts %} 
+#  - {{ dsh }}{% endfor %}
+
+#
+# Bootstrap the cluster using an initial set of master-eligible nodes:
+#
+# NB format of these names must match exactly format of nodes listed in node.name
+# First run only
+# After the cluster forms successfully for the first time, remove the cluster.initial_master_nodes setting from each nodes' configuration. Do not use this setting when restarting a cluster or adding a new node to an existing cluster.
+#cluster.initial_master_nodes:{% for cimn in es_hosts %} 
+#  - {{ cimn }}{% endfor %}
+ 
+#
+# For more information, consult the discovery and cluster formation module documentation.
+#
+# ---------------------------------- Various -----------------------------------
+#
+# Allow wildcard deletion of indices:
+#
+#action.destructive_requires_name: false
+
+#----------------------- BEGIN SECURITY AUTO CONFIGURATION -----------------------
+#
+# The following settings, TLS certificates, and keys have been automatically      
+# generated to configure Elasticsearch security features on 22-03-2022 17:38:07
+#
+# --------------------------------------------------------------------------------
+
+# Enable security features
+xpack.security.enabled: true
+
+xpack.security.enrollment.enabled: true
+
+# Enable encryption for HTTP API client connections, such as Kibana, Logstash, and Agents
+xpack.security.http.ssl:
+  enabled: true
+  keystore.path: certs/http.p12
+
+# Enable encryption and mutual authentication between cluster nodes
+xpack.security.transport.ssl:
+  enabled: true
+  verification_mode: certificate
+  keystore.path: certs/transport.p12
+  truststore.path: certs/transport.p12
+# Create a new cluster with the current node only
+# Additional nodes can still join the cluster later
+cluster.initial_master_nodes: [{{ ansible_hostname }}]
+
+# Allow HTTP API connections from localhost and local networks
+# Connections are encrypted and require user authentication
+http.host: [_local_, _site_]
+
+# Allow other nodes to join the cluster from localhost and local networks
+# Connections are encrypted and mutually authenticated
+transport.host: [_local_, _site_]
+
+#----------------------- END SECURITY AUTO CONFIGURATION -------------------------

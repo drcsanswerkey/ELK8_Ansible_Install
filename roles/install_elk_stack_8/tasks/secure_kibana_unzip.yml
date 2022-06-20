@@ -1,0 +1,61 @@
+---
+-  name: "Creating config/certificates directory if it doesn't exist"
+   file: 
+      path: /usr/share/elasticsearch/config/certificates
+      state: directory
+      owner: root
+      group: root
+      mode: '0600'
+
+-  name: "Creating certs creation directory if it doesn't exist"
+   file: 
+      path: /usr/share/elasticsearch/certs
+      state: directory
+      owner: root
+      group: root
+      mode: '0600'
+
+-  name: "Copying out instances.yml"
+   copy: 
+      src: ../roles/install_elk_stack_8/files/{{ environs }}/instances.yml
+      dest: /usr/share/elasticsearch/config/certificates/instances.yml
+
+-  name: "Running elasticsearch-certutil on {{ servers }}"
+   shell: |
+      /usr/share/elasticsearch/bin/elasticsearch-certutil cert --self-signed --silent --pem --in /usr/share/elasticsearch/config/certificates/instances.yml -out /usr/share/elasticsearch/certs/bundle.zip
+   register: certutil_results
+   ignore_errors: yes
+
+-  name: "Fetching certs in bundle.zip from {{ servers }}"
+   fetch: 
+      src: /usr/share/elasticsearch/certs/bundle.zip
+      dest: "../roles/install_elk_stack_8/files/{{ environs }}/bundle.zip"
+      flat: yes
+
+# -  name: "Unzipping bundle.zip - can't get working - go unzip manually -_-"
+#    shell: |
+#       unzip {{CWD}}/../files/{{ environs }}/bundle.zip
+#    register: unzip_results
+#    delegate_to: localhost
+#    ignore_errors: yes
+
+-  name: "Printing playbooks/playbook_dir"
+   debug:
+      msg: "{{ playbook_dir }}"
+   delegate_to: localhost
+
+-  name: "Printing playbooks playbook role_path"
+   debug:
+      msg: "{{ role_path }}"
+   delegate_to: localhost
+
+# -  name: "Unzipping bundle.zip"
+#    unarchive:
+#       # src: "../../roles/install_elk_stack_8/files/{{ environs }}/bundle.zip"
+#       # dest: "../../roles/install_elk_stack_8/files/{{ environs }}/"
+#       src: "{{CWD}}/../files/{{ environs }}/bundle.zip"
+#       dest: "{{CWD}}/../files/{{ environs }}/"
+#    register: unzip_results
+#    delegate_to: localhost
+#    ignore_errors: yes
+

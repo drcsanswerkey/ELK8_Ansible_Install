@@ -1,0 +1,197 @@
+---
+
+##Tweaking system settings to comply with ES production mode requirements 
+-  name: Disabling SELinux
+   selinux:
+      state: disabled
+   ignore_errors: true
+   when: ansible_os_family == "RedHat"
+
+###Begin tasks if installing from yum repo###  
+-  name: Importing ElasticSearch gpg key
+   rpm_key:
+     state: present
+     key: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+     fingerprint: 4609 5ACC 8548 582C 1A26 99A9 D27D 666C D88E 42B4
+   when: ansible_os_family == "RedHat" and install_method == "o"
+
+-  name: Adding Elasticsearch 8 repo
+   yum_repository:
+     name: elasticsearch
+     description: Elasticsearch repo for 8.x packages
+     baseurl: https://artifacts.elastic.co/packages/8.x/yum
+     gpgcheck: yes
+     gpgkey: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+     enabled: yes
+   when: ansible_os_family == "RedHat" and install_method == "o"
+
+-  name: Installing Kibana (yum online)
+   yum:
+      name: "kibana-{{ version_installing }}"
+      state: latest
+   register: kb_yum_output
+   when: ansible_os_family == "RedHat" and install_method == "o"
+###End tasks if installing from repo###
+
+###Begin tasks if installing from rpm###
+-  name: Pushing out Kibana rpm
+   copy:
+      src: ../files/installation_binaries/kibana-{{ version_installing }}-x86_64.rpm
+      dest: /tmp/kibana-{{ version_installing }}-x86_64.rpm
+      owner: root
+      group: root
+      mode: 0700
+   when: ansible_os_family == "RedHat" and install_method == "f"
+
+-  name: Installing Kibana (rpm file)
+   yum:
+      name: /tmp/kibana-{{ version_installing }}-x86_64.rpm
+      state: present
+   register: kb_rpm_output
+   when: ansible_os_family == "RedHat" and install_method == "f"
+###End tasks if installing from rpm###
+
+###Begin tasks if installing from apt repo###
+# In accordance with Elastico's preferred method, ensure that apt-transport-https has been installed
+# Alter tasks below if you want to do it another way
+-  name: Ensuring pre-requisite apt-transport-https has been installed
+   apt:
+      name: apt-transport-https
+      state: present
+   when: ansible_os_family == "Debian" and install_method == "o"
+
+-  name: "Pushing out Elasticsearch repository file"
+   copy:
+      src: ../files/elastic-8.x.list
+      dest: /etc/apt/sources.list.d/
+      owner: root
+      group: root
+      mode: '0644'
+   when: ansible_os_family == "Debian" and install_method == "o"
+
+-  name: Installing ElasticSearch (apt online)
+   apt:
+      name: "kibana={{ version_installing }}"
+      state: present
+      update_cache: yes
+   register: kb_apt_output
+   when: ansible_os_family == "Debian" and install_method == "o"
+###End tasks if installing from apt repo###
+
+###Begin tasks if installing from deb###
+-  name: Pushing out Kibana deb
+   copy:
+      src: ../files/installation_binaries/kibana-{{ version_installing }}-amd64.deb
+      dest: /tmp/kibana-{{ version_installing }}-amd64.deb
+      owner: root
+      group: root
+      mode: 0700
+   when: ansible_os_family == "Debian" and install_method == "f"
+
+-  name: Installing Kibana (file deb)
+   apt:
+      deb: /tmp/kibana-{{ version_installing }}-amd64.deb
+   register: kb_deb_output
+   when: ansible_os_family == "Debian" and install_method == "f"
+###End tasks if installing from deb###
+
+-  name: "Printing yum installation output (for troubleshooting, if necessary)"
+   debug: msg="{{ kb_yum_output.results }}"
+   when: ansible_os_family == "RedHat" and install_method == "o"
+
+-  name: "Printing rpm installation output (for troubleshooting, if necessary)"
+   debug: msg="{{ kb_rpm_output.results }}"
+   when: ansible_os_family == "RedHat" and install_method == "f"
+
+-  name: "Printing apt installation output (for troubleshooting, if necessary)"
+   debug: msg="{{ kb_apt_output.stdout_lines }}"
+   when: ansible_os_family == "Debian" and install_method == "o"
+
+-  name: "Printing deb installation output (for troubleshooting, if necessary)"
+   debug: msg="{{ kb_deb_output.stdout_lines }}"
+   when: ansible_os_family == "Debian" and install_method == "f"
+
+## Writing results to local file
+-  name: Writing yum installation output to file
+   copy: 
+      content: "\n{{ kb_yum_output.results }}\n"
+      dest: "/tmp/kb-{{ inventory_hostname }}-{{ timestamp }}"
+   when: ansible_os_family == "RedHat" and install_method == "o"
+
+-  name: Writing rpm installation output to file
+   copy: 
+      content: "\n{{ kb_rpm_output.results }}\n"
+      dest: "/tmp/kb-{{ inventory_hostname }}-{{ timestamp }}"
+   when: ansible_os_family == "RedHat" and install_method == "f"
+
+-  name: Writing apt installation output to file
+   copy: 
+      content: "\n{{ kb_apt_output.stdout_lines }}\n"
+      dest: "/tmp/kb-{{ inventory_hostname }}-{{ timestamp }}"
+   when: ansible_os_family == "Debian" and install_method == "o"
+
+-  name: Writing deb installation output to file
+   copy: 
+      content: "\n{{ kb_deb_output.stdout_lines }}\n"
+      dest: "/tmp/kb-{{ inventory_hostname }}-{{ timestamp }}"
+   when: ansible_os_family == "Debian" and install_method == "f"
+
+## Retrieving Kibana installation output to the Ansible server
+-  name: Retrieving Kibana installation output
+   fetch: 
+      src: "/tmp/kb-{{ inventory_hostname }}-{{ timestamp }}"
+      dest: ../roles/install_elk_stack_8/files/output/
+      flat: yes
+
+-  name: Templating out Kibana config file
+   template:
+      src: ../templates/kibana.yml.j2
+      dest: /etc/kibana/kibana.yml
+      owner: root
+      group: kibana
+      backup: yes
+      mode: 0660
+     
+###Begin RedHat firewall tasks###
+# This turns on the firewall if it's off, add other ports as necessary for your environment (or turn it off as unadvisable as that may be)
+-  name: Opening ports for Kibana (9200-9201)
+   firewalld:
+     port: "{{ item }}"
+     permanent: yes
+     immediate: yes
+     state: enabled
+   loop: # Add other ports as necessary
+      - 22/tcp
+      - 5601/tcp
+      - 8220/tcp # Uncomment if this server is acting as a Fleet server
+      - 80/tcp  # Uncomment if http
+      # - 443/tcp  # Uncomment if https
+   tags: [ elasticsearch ]
+   ignore_errors: true
+   when: ansible_os_family == "RedHat"
+###End RedHat firewall tasks###
+
+###Begin Debian firewall tasks###
+-  name: Opening ports for Kibana
+   ufw:
+     rule: allow
+     port: "{{ item }}"
+     proto: tcp
+     state: enabled
+   loop: # Add other ports as necessary
+      - 22
+      - 5601
+      - 8220 # Uncomment if this server is acting as a Fleet server
+      - 80 # Uncomment if http
+#      - 443 # Uncomment if https
+   ignore_errors: true
+   when: ansible_os_family == "Debian"
+###End Debian firewall tasks###
+
+-  name: Setting up systemctl stuff for Kibana
+   systemd:
+      daemon_reload: yes   
+      name: kibana.service
+      state: restarted
+      enabled: yes
+

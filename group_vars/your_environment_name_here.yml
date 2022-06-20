@@ -1,0 +1,25 @@
+---
+# default file for group vars
+# Populated by Dr. C's Answer Key drcsanswerkey@gmail.com
+# Copy this to a new file for each environment and adjust the values as necessary (i.e. production.yml, lab.yml, remote_site1.yml)
+
+environs: "< your environment name here>"
+
+# elasticsearch vars
+es_cluster_name: "<cluster name>"
+es_data_src: "< i.e. nas server: >"
+es_data_paths: "< elasticsearch data path: local or on nas (above) >"
+es_hosts:
+  - "<elk1>"
+  - "<elk2>"
+  - "<elk3>"
+es_log_paths: "/var/log/elasticsearch"
+es_prefix: "http://" # or "https://"
+es_protocol: "http" # or "https"
+elk_system_certificates_dir: "/etc/pki/certs"
+elk_certs_dir: "/etc/elasticsearch/certs" # DO NOT add the trailing /
+
+# kibana vars
+kibana_host: "< kibana host >"
+kb_prefix: "http://" # or "https://"
+kb_ls_port: "5601"

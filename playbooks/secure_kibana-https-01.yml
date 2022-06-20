@@ -1,0 +1,110 @@
+#!/bin/ansible-playbook
+# Written by Dr. C's Answer Key drcsanswerkey@gmail.com
+# This playbook sets up https between a browser and Kibana
+# pass a -k and -K and maybe a -i 
+
+### Notes ###
+## See roles/install_elk_stack_8/README.md for instructions on
+# - Forming the cluster
+# - Installing and configuring Kibana & Fleet
+# - And much much more!!!
+
+## This playbook is part 1 of 2, to set up self-signed certs for https browser access to Kibana and certain tasks hinge\n
+## upon having run the cert generation procedures for Fleet installation found in roles/install_elk_stack_8/README.md
+# Part 1 creates self-signed certs using utilities on a server which has Elasticsearch installed on it,\n 
+# and retrieves certs from setting up fleet (outlined in README.md)
+# Assumptions:
+   # - This playbook assumes your play_host (the one where the cert generation is being done) is the same one that was used to create\n
+   #  certs for Fleet and that those certs are still in /etc/elasticsearch/certs/
+# Things to do:
+#  - you'll need to copy/create a roles/install_elk_stack_8/files/{{ environs }}/instances.yml for each environment
+#  - {{ environs }} == name of your environment
+#  - instances.yml <- name does not change (which is why it needs to be in a uniquely named {{ environs }} folder under files/)
+#  - If the assumption above is not true, you'll need to create and place the appropriate files somewhere that secure_kibana-https-02.yml can find them.
+# Part 2 pushes out the certs & new configuration to the Kibana server(s) and restarts Kibana 
+
+---
+-  name: Creating https certs for Kibana
+   become: yes
+   vars:
+      install_elasticsearch: "n"
+      install_kibana: "n"
+      ## Uncomment/hard code the following vars if you want to speed things up & comment out the vars prompts below
+      # environs: "<must match filename in group_vars minus '.yml'>"
+      # servers: 
+      #    - elk1
+
+   vars_prompt:
+      -  name: environs
+         prompt: "Which environment are you operating in? (answer must match filename in group_vars minus '.yml')"
+         private: no
+
+      -  name: servers
+         prompt: "On which Elasticsearch server would you like to create the certs for Kibana?"
+         private: no
+
+   hosts: "{{ servers }}"
+
+   vars_files: 
+   -  "../group_vars/{{ environs }}.yml"   
+         
+   tasks:
+      -  name: "Creating config/certificates directory if it doesn't exist"
+         file: 
+            path: /usr/share/elasticsearch/config/certificates
+            state: directory
+            owner: root
+            group: root
+            mode: '0600'
+
+      -  name: "Creating certs creation directory if it doesn't exist"
+         file: 
+            path: /usr/share/elasticsearch/certs
+            state: directory
+            owner: root
+            group: root
+            mode: '0600'
+
+      -  name: "Copying out instances.yml"
+         copy: 
+            src: ../roles/install_elk_stack_8/files/{{ environs }}/instances.yml
+            dest: /usr/share/elasticsearch/config/certificates/instances.yml
+
+      -  name: "Running elasticsearch-certutil on {{ servers }}"
+         shell: |
+            /usr/share/elasticsearch/bin/elasticsearch-certutil cert --self-signed --silent --pem --in /usr/share/elasticsearch/config/certificates/instances.yml -out /usr/share/elasticsearch/certs/bundle.zip
+         register: certutil_results
+         ignore_errors: yes
+
+      -  name: "Fetching certs in bundle.zip from {{ servers }}"
+         fetch: 
+            src: /usr/share/elasticsearch/certs/bundle.zip
+            dest: "../roles/install_elk_stack_8/files/{{ environs }}/bundle.zip"
+            flat: yes
+
+      -  name: "Unzipping bundle.zip"
+         unarchive:
+            src: "{{ playbook_dir }}/../roles/install_elk_stack_8/files/{{ environs }}/bundle.zip"
+            dest: "{{ playbook_dir }}/../roles/install_elk_stack_8/files/{{ environs }}/"
+         register: unzip_bundle_results
+         delegate_to: localhost
+         ignore_errors: yes
+
+      -  name: "Fetching elastic-stack-ca.zip from {{ servers }}"
+         fetch: 
+            src: /etc/elasticsearch/certs/elastic-stack-ca.zip
+            dest: "../roles/install_elk_stack_8/files/{{ environs }}/elastic-stack-ca.zip"
+            flat: yes
+
+      -  name: "Unzipping elastic-stack-ca.zip"
+         unarchive:
+            src: "{{ playbook_dir }}/../roles/install_elk_stack_8/files/{{ environs }}/elastic-stack-ca.zip"
+            dest: "{{ playbook_dir }}/../roles/install_elk_stack_8/files/{{ environs }}/"
+         register: unzip_ca_results
+         delegate_to: localhost
+         ignore_errors: yes
+
+   pre_tasks:  
+      -  set_fact: timestamp="{{lookup('pipe','date +%Y%m%d%H%M%S')}}"
+
+   

@@ -1,0 +1,41 @@
+---
+# -  name: "Printing elastic password (a more complicated way - left here as an example of what type of stdout parsing can be done"
+#    debug:
+#       msg: "The elastic password is << {{ elasticinstallation_output.stdout_lines[12].split(':')[-1].strip() }} >>"
+
+-  name: "Printing Elastic password for yum installation"
+   debug:
+      msg: "Re: {{ ansible_hostname }} - The generated password {{ es_yum_output.results[0].split('generated password')[1].split('If this')[0].strip('\n\n') }}"
+   when: ansible_os_family == "RedHat" and install_method == "o" and install_elasticsearch == "y"
+
+-  name: "Printing Elastic password for rpm installation"
+   debug:
+      msg: "Re: {{ ansible_hostname }} - The generated password {{ es_rpm_output.results[0].split('generated password')[1].split('If this')[0].strip('\n\n') }}"
+   when: ansible_os_family == "RedHat" and install_method == "f" and install_elasticsearch == "y"
+
+-  name: "Printing Elastic password for apt installation"
+   debug:
+      msg: "Re: {{ ansible_hostname }} - {{ es_apt_output.stdout_lines[-23] }}"
+   when: ansible_os_family == "Debian" and install_method == "o" and install_elasticsearch == "y"
+
+-  name: "Printing Elastic password for deb installation"
+   debug:
+      msg: "Re: {{ ansible_hostname }} - {{ es_deb_output.stdout_lines[12] }}"
+   when: ansible_os_family == "Debian" and install_method == "f" and install_elasticsearch == "y"
+
+# Informational messages
+-  name: "Looking for your installation's stdout?"
+   debug:
+      msg: "The stdout of this recent installation has been copied to your ansible server in /roles/install_elk_stack_8/files/output/"
+   run_once: true
+
+-  name: "Cluster creation instructions"
+   debug:
+      msg: "To add additional hosts to your cluster, follow the instructions in /roles/install_elk_stack_8/README.md"
+   run_once: true
+
+-  name: "Want to install Fleet Server?"
+   debug:
+      msg: "Follow the instructions in /roles/install_elk_stack_8/README.md"
+   run_once: true
+

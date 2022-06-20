@@ -1,0 +1,14 @@
+---
+# tasks file for install_elk_stack_8
+
+-  include: install_elasticsearch.yml
+   when: install_elasticsearch == "y"
+   ignore_errors: true
+
+-  include: install_kibana.yml
+   when: install_kibana == "y"
+   ignore_errors: true
+
+-  include: finalize.yml
+   when: install_kibana == "y" or install_elasticsearch == "y"
+   ignore_errors: true

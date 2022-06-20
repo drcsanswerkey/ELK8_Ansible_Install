@@ -1,0 +1,20 @@
+# Copy this file to "hosts" and fill out according to your own environment
+
+
+[local]
+localhost
+
+############## Begin lab hosts ##############
+[elks]
+elk1
+elk2
+elk3
+
+[kibanas]
+kibana1
+
+[fleet_servers]
+kibana1
+
+############## End lab hosts ##############
+

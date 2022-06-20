@@ -1,0 +1,114 @@
+#!/bin/ansible-playbook
+# Written by Dr. C's Answer Key drcsanswerkey@gmail.com
+# This playbook sets up https between a browser and Kibana
+# pass a -k and -K and maybe a -i 
+
+### Notes ###
+## See roles/install_elk_stack_8/README.md for instructions on
+# - Forming the cluster
+# - Installing and configuring Kibana & Fleet
+# - And much much more!!!
+
+## This playbook is part 2 of 2, to set up https browser access to Kibana
+# Part 1 creates the certs using utilities on a server which has Elasticsearch installed on it
+# Part 2 pushes out the certs & new configuration to the Kibana server(s) and restarts Kibana 
+# Ensure that kb_prefix is set to "https://" in your group_vars file
+
+---
+-  name: Pushing out https certs for, and restarting Kibana
+   become: yes
+   vars:
+      install_elasticsearch: "n"
+      install_kibana: "n"
+      ## Uncomment/hard code the following vars if you want to speed things up & comment out the vars prompts below
+      # environs: "<must match filename in group_vars minus '.yml'>"
+      # servers: 
+      #    - elk1
+      #    - elk2
+      #    - elk3
+      # install_method: "o"
+
+   vars_prompt:
+      -  name: gpg_signature
+         prompt: "\n\n
+         ### Please Note ###\n
+         Running this playbook (part 2 of 2) assumes you have run part 1 or that the necessary files have\n
+         been otherwise emplaced on your Ansible server where this playbook expects to find them\n\n
+
+         Also, ensure that kb_prefix is set to \"https://\" in your group_vars file!\n\n
+
+         If these items are good to go, press <enter> to continue, otherwise press ctrl+c to exit out to make adjustments!\n"
+         private: no
+
+      -  name: environs
+         prompt: "Which environment are you operating in? (answer must match filename in group_vars minus '.yml')"
+         private: no
+
+      -  name: servers
+         prompt: "Which Kibana server(s) would you like to secure with https?"
+         private: no
+
+   hosts: "{{ servers }}"
+
+   vars_files: 
+   -  "../group_vars/{{ environs }}.yml"   
+
+   tasks:
+      - name: "Creating /etc/pki/certs/kibana directory if it doesn't exist"
+        file: 
+         path: /etc/pki/certs/kibana
+         state: directory
+         owner: kibana
+         group: kibana
+         mode: '0760'
+
+      - name: "Pushing out {{ inventory_hostname }}.crt"
+        copy: 
+         src: ../roles/install_elk_stack_8/files/{{ environs }}/{{ inventory_hostname }}/{{ inventory_hostname }}.crt
+         dest: /etc/pki/certs/kibana/
+         owner: kibana
+         group: kibana
+         mode: '0660'
+
+      - name: "Pushing out {{ inventory_hostname }}.key"
+        copy: 
+         src: ../roles/install_elk_stack_8/files/{{ environs }}/{{ inventory_hostname }}/{{ inventory_hostname }}.key
+         dest: /etc/pki/certs/kibana/
+         owner: kibana
+         group: kibana
+         mode: '0660'
+
+      - name: "Changinge publicBaseUrl from http to https in kibana.yml"
+        lineinfile:
+         path: /etc/kibana/kibana.yml
+         # owner: root
+         # group: "kibana"
+         # mode: 0660
+         backup: yes
+         regexp: "^server.publicBaseUrl:"
+         line: "server.publicBaseUrl: \"{{ kb_prefix }}{{ ansible_default_ipv4.address }}:{{ kb_ls_port }}\""
+        ignore_errors: true
+
+      - name: "Putting ssl lines into kibana.yml"
+        blockinfile:
+         path: /etc/kibana/kibana.yml
+         owner: root
+         group: "kibana"
+         mode: 0660
+         backup: yes
+         marker: "# ==== {mark} Ansible managed ssl settings === #"
+         block: |
+            server.ssl.enabled: true
+            server.ssl.certificate: /etc/pki/certs/kibana/{{ kibana_host }}.crt
+            server.ssl.key: /etc/pki/certs/kibana/{{ kibana_host }}.key
+        ignore_errors: true
+
+      - name: "Restarting Kibana with ssl enabled..."
+        systemd:
+         daemon_reload: yes   
+         name: "kibana.service"
+         state: restarted
+         enabled: yes
+
+   pre_tasks:  
+      -  set_fact: timestamp="{{lookup('pipe','date +%Y%m%d%H%M%S')}}"

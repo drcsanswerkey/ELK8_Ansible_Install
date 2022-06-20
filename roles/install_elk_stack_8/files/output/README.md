@@ -1,0 +1,1 @@
+Auto-generated passwords from the Elasticsearch installation process will be capture and stored in timestamped files in this directory.

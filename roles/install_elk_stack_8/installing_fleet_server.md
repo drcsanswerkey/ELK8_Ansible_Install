@@ -1,0 +1,1 @@
+### Instructions have been moved to the main README.md in the role "install_elk_stack_8"
